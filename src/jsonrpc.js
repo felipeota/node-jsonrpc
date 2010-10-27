@@ -92,22 +92,22 @@ var JSONRPC = {
     },
     
     handleInvalidRequest: function(req, res) {
-        res.sendHeader(400, [['Content-Type', 'text/plain'],
+        res.writeHead(400, [['Content-Type', 'text/plain'],
                              ['Content-Length', INVALID_REQUEST.length]]);
-        res.sendBody(INVALID_REQUEST);
-        res.finish();
+        res.write(INVALID_REQUEST);
+        res.end();
     },
     
     handlePOST: function(req, res) {
         var buffer = '';
-        var promise = new process.Promise();
-        promise.addCallback(function(buf) {
+        var promise = function(buf) {
 
             var decoded = JSON.parse(buf);
+            console.log(buf);
             
             // Check for the required fields, and if they aren't there, then
             // dispatch to the handleInvalidRequest function.
-            if(!(decoded.method && decoded.params && decoded.id)) {
+            if(!(decoded.method && decoded.params )) {
                 return JSONRPC.handleInvalidRequest(req, res);
             }
             if(!JSONRPC.functions.hasOwnProperty(decoded.method)) {
@@ -122,10 +122,10 @@ var JSONRPC = {
                     'error': null,
                     'id': decoded.id
                 });
-                res.sendHeader(200, [['Content-Type', 'application/json'],
+                res.writeHead(200, [['Content-Type', 'application/json'],
                                      ['Content-Length', encoded.length]]);
-                res.sendBody(encoded);
-                res.finish();
+                res.write(encoded);
+                res.end();
             };
             
             // Build our failure handler (note that error must not be null)
@@ -136,10 +136,10 @@ var JSONRPC = {
                     'error': failure || 'Unspecified Failure',
                     'id': decoded.id
                 });
-                res.sendHeader(200, [['Content-Type', 'application/json'],
+                res.writeHead(200, [['Content-Type', 'application/json'],
                                      ['Content-Length', encoded.length]]);
-                res.sendBody(encoded);
-                res.finish();
+                res.write(encoded);
+                res.end();
             };
             
             JSONRPC.trace('<--', 'request (id ' + decoded.id + '): ' + decoded.method + '(' + decoded.params.join(', ') + ')');
@@ -157,19 +157,13 @@ var JSONRPC = {
             
             // If it's a promise, we should add callbacks and errbacks,
             // but if it's not, we can just go ahead and call the callback.
-            if(resp instanceof process.Promise) {
-                resp.addCallback(onSuccess);
-                resp.addErrback(onFailure);
-            }
-            else {
-                onSuccess(resp);
-            }
-        });
-        req.addListener('body', function(chunk) {
+            onSuccess(resp);
+        }
+        req.on('data', function(chunk) {
             buffer = buffer + chunk;
         });
-        req.addListener('complete', function() {
-            promise.emitSuccess(buffer);
+        req.on('end', function() {
+            promise(buffer);
         });
     },
     
@@ -201,4 +195,7 @@ var JSONRPC = {
     }
 };
 
-process.mixin(exports, JSONRPC);
+for (var i in JSONRPC)
+{
+    exports[i] = JSONRPC[i];
+}
